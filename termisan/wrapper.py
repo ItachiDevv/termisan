@@ -1,23 +1,16 @@
-"""PTY-based terminal wrapper that adds anime-themed decorations.
+"""Terminal wrapper that adds anime-themed decorations.
 
 Uses ANSI escape sequences and VT100 scroll regions to render a themed
 header and footer around the wrapped subprocess (claude, codex, etc.).
+
+Supports macOS, Linux, and Windows.
 """
 
-import errno
-import fcntl
-import os
-import pty
 import random
-import select
-import signal
-import struct
 import sys
-import termios
-import tty
 from datetime import datetime
 
-from termisan.sprites import get_sprite_lines
+from termisan.platform import IS_UNIX, IS_WINDOWS, get_terminal_size
 from termisan.themes import AnimeTheme
 
 # ANSI escape helpers
@@ -84,7 +77,11 @@ def _ansi_dim() -> str:
 
 
 class ThemedTerminalWrapper:
-    """Wraps a subprocess in a themed terminal frame."""
+    """Base class for themed terminal wrappers.
+
+    Handles rendering of headers and footers. Subclasses implement
+    the platform-specific process management and I/O loop.
+    """
 
     HEADER_HEIGHT = 3  # Title bar lines
     FOOTER_HEIGHT = 1  # Status bar line
@@ -94,9 +91,6 @@ class ThemedTerminalWrapper:
         self.command = command
         self.rows = 24
         self.cols = 80
-        self.child_pid = -1
-        self.master_fd = -1
-        self._original_termios = None
         self._running = False
         self._quote = random.choice(theme.quotes) if theme.quotes else ""
 
@@ -110,132 +104,11 @@ class ThemedTerminalWrapper:
 
     def run(self) -> int:
         """Run the themed terminal wrapper. Returns the child exit code."""
-        # Get terminal size
-        self._update_terminal_size()
-
-        # Save terminal state
-        old_settings = termios.tcgetattr(sys.stdin.fileno())
-        self._original_termios = old_settings
-
-        try:
-            # Fork PTY
-            self.child_pid, self.master_fd = pty.fork()
-
-            if self.child_pid == 0:
-                # Child process: exec the command
-                os.execvp(self.command[0], self.command)
-                sys.exit(127)
-
-            # Parent process
-            self._running = True
-
-            # Set up signal handlers
-            signal.signal(signal.SIGWINCH, self._handle_resize)
-            signal.signal(signal.SIGCHLD, signal.SIG_DFL)
-
-            # Set the child PTY size
-            self._set_child_size()
-
-            # Put terminal in raw mode
-            tty.setraw(sys.stdin.fileno())
-
-            # Draw initial frame
-            self._draw_frame()
-
-            # Main I/O loop
-            return self._io_loop()
-
-        finally:
-            # Restore terminal
-            self._running = False
-            sys.stdout.write(_ansi_reset_scroll_region())
-            sys.stdout.write(_ansi_show_cursor())
-            sys.stdout.write(_ansi_reset())
-            sys.stdout.write(_ansi_move(self.rows, 1))
-            sys.stdout.write("\n")
-            sys.stdout.flush()
-            try:
-                termios.tcsetattr(sys.stdin.fileno(), termios.TCSAFLUSH, old_settings)
-            except termios.error:
-                pass
-
-    def _io_loop(self) -> int:
-        """Main I/O forwarding loop between stdin and the child PTY."""
-        stdin_fd = sys.stdin.fileno()
-        stdout_fd = sys.stdout.fileno()
-
-        while self._running:
-            try:
-                rfds, _, _ = select.select([stdin_fd, self.master_fd], [], [], 0.1)
-            except (select.error, OSError) as e:
-                if hasattr(e, "errno") and e.errno == errno.EINTR:
-                    continue
-                if isinstance(e, OSError) and e.errno == errno.EINTR:
-                    continue
-                break
-
-            if stdin_fd in rfds:
-                try:
-                    data = os.read(stdin_fd, 4096)
-                    if not data:
-                        break
-                    os.write(self.master_fd, data)
-                except OSError:
-                    break
-
-            if self.master_fd in rfds:
-                try:
-                    data = os.read(self.master_fd, 4096)
-                    if not data:
-                        break
-                    # Write to stdout (the scroll region will contain it)
-                    os.write(stdout_fd, data)
-                except OSError:
-                    break
-
-        # Wait for child and get exit code
-        try:
-            _, status = os.waitpid(self.child_pid, 0)
-            if os.WIFEXITED(status):
-                return os.WEXITSTATUS(status)
-            return 1
-        except ChildProcessError:
-            return 0
+        raise NotImplementedError
 
     def _update_terminal_size(self):
         """Update stored terminal dimensions."""
-        try:
-            result = struct.unpack(
-                "hh", fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, b"\x00" * 4)
-            )
-            self.rows = result[0]
-            self.cols = result[1]
-        except (OSError, struct.error):
-            self.rows = 24
-            self.cols = 80
-
-    def _set_child_size(self):
-        """Set the child PTY size to match the content area."""
-        content_rows = self.content_bottom - self.content_top + 1
-        try:
-            winsize = struct.pack("HHHH", content_rows, self.cols, 0, 0)
-            fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, winsize)
-        except OSError:
-            pass
-
-    def _handle_resize(self, signum, frame):
-        """Handle terminal resize (SIGWINCH)."""
-        self._update_terminal_size()
-        self._set_child_size()
-
-        # Signal the child about the resize
-        try:
-            os.kill(self.child_pid, signal.SIGWINCH)
-        except OSError:
-            pass
-
-        # Redraw frame
-        self._draw_frame()
+        self.rows, self.cols = get_terminal_size()
 
     def _draw_frame(self):
         """Draw the themed header and footer, set scroll region."""
@@ -335,9 +208,20 @@ class ThemedTerminalWrapper:
 
         return "".join(out)
 
+    def _cleanup_terminal(self):
+        """Reset terminal state after the wrapped session ends."""
+        sys.stdout.write(_ansi_reset_scroll_region())
+        sys.stdout.write(_ansi_show_cursor())
+        sys.stdout.write(_ansi_reset())
+        sys.stdout.write(_ansi_move(self.rows, 1))
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
 
 def run_wrapped_session(theme: AnimeTheme, command: list[str]) -> int:
     """Run a command wrapped in an anime-themed terminal frame.
+
+    Automatically selects the correct wrapper for the current platform.
 
     Args:
         theme: The anime theme to apply.
@@ -346,5 +230,14 @@ def run_wrapped_session(theme: AnimeTheme, command: list[str]) -> int:
     Returns:
         The exit code of the wrapped process.
     """
-    wrapper = ThemedTerminalWrapper(theme, command)
+    if IS_UNIX:
+        from termisan.wrapper_unix import UnixTerminalWrapper
+        wrapper = UnixTerminalWrapper(theme, command)
+    elif IS_WINDOWS:
+        from termisan.wrapper_windows import WindowsTerminalWrapper
+        wrapper = WindowsTerminalWrapper(theme, command)
+    else:
+        print(f"Error: Unsupported platform '{sys.platform}'.", file=sys.stderr)
+        return 1
+
     return wrapper.run()
