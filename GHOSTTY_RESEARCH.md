@@ -374,6 +374,49 @@ Termisan CLI
 
 ---
 
+## 17. Additional Deep-Dive Notes
+
+### Origin Story
+Mitchell Hashimoto started Ghostty in **2022** as a hobby project to learn **Zig** and explore graphics programming. He had no plan to release it publicly but discovered existing terminals forced unacceptable tradeoffs. He opened a Discord server in 2023 — **28,000 people** joined, ~5,000 were selected for private beta. After nearly 2 years of beta testing, **Ghostty 1.0 launched December 26, 2024** under MIT license. The GitHub repo now has **~46,000+ stars**, making it the most-starred terminal emulator on GitHub.
+
+### Architecture — libghostty
+The core is a **cross-platform C-ABI compatible library called `libghostty`**, with platform-specific GUI layers on top. The heavy lifting (terminal emulation, font handling, rendering) lives in the shared Zig core, while each platform gets a truly native GUI shell. A sub-library `libghostty-vt` (terminal sequence parsing) targets Zig, C, and even **WebAssembly**.
+
+### Sixel — Explicitly NOT Supported
+Ghostty **will not** add Sixel support. The maintainer considers Sixel to have too many unspecified edge cases and poor library quality. They back the Kitty graphics protocol as the superior alternative. This matters because tmux/Zellij only support Sixel (not Kitty graphics), so inline images don't work inside multiplexers.
+
+### Quick Terminal (Quake Mode)
+Global hotkey summons a slide-down terminal from the screen edge. State persists between toggles. Configurable animation duration. Currently **macOS only**.
+
+### Command Palette
+Searchable palette (`Cmd+Shift+P`) exposing all actions — similar to VS Code. Future plans include letting running programs (e.g., Neovim) expose their own commands in the palette.
+
+### CLI Tools
+```bash
+ghostty +list-themes     # Browse available themes
+ghostty +list-fonts      # List available fonts
+ghostty +list-keybinds   # Show all keybindings
+ghostty +show-config     # Show current config
+ghostty +validate-config # Validate config file
+```
+
+### Community Sites
+- [ghostty.style](https://github.com/ghostty-org/ghostty/discussions/10928) — 460+ community themes
+- [ghostty.town](https://ghostty.town) — User-submitted configurations
+- [ghostty-config](https://github.com/zerebos/ghostty-config) — Web-based config generator
+- [ghostty-shaders](https://github.com/0xhckr/ghostty-shaders) — Community shader effects
+
+### App Intents (macOS)
+Ghostty can be automated via **Apple Shortcuts** using App Intents, in addition to AppleScript.
+
+### Accessibility API (macOS)
+Read-only accessibility for screen readers and AI tools (opt-in, requires permissions). This could be useful for Termisan to read terminal state.
+
+### Undo Close
+You can **undo closing a tab or window** — a small but delightful feature.
+
+---
+
 ## Sources
 
 - [Ghostty Official Website](https://ghostty.org/)
@@ -394,3 +437,11 @@ Termisan CLI
 - [14 Themes for Ghostty](https://itsfoss.com/ghostty-themes/)
 - [Ghostty Terminal Features Review](https://itsfoss.com/ghostty-terminal-features/)
 - [Choosing a Terminal on macOS 2025](https://medium.com/@dynamicy/choosing-a-terminal-on-macos-2025-iterm2-vs-ghostty-vs-wezterm-vs-kitty-vs-alacritty-d6a5e42fd8b3)
+- [Ghostty 1.0 is Coming — Mitchell Hashimoto](https://mitchellh.com/writing/ghostty-is-coming)
+- [Ghostty 1.0 has been summoned — LWN.net](https://lwn.net/Articles/1004377/)
+- [Ghostty: A Modern Terminal for Developers — OpenReplay](https://blog.openreplay.com/ghostty-modern-terminal-developers/)
+- [Ghostty Shaders Repository](https://github.com/0xhckr/ghostty-shaders)
+- [ghostty.style Theme Gallery](https://github.com/ghostty-org/ghostty/discussions/10928)
+- [Ghostty Config Generator](https://github.com/zerebos/ghostty-config)
+- [Sixel Support Discussion](https://github.com/ghostty-org/ghostty/discussions/2496)
+- [Ghostty Non-Profit Announcement](https://www.omgubuntu.co.uk/2025/12/ghostty-terminal-non-profit-fiscal-sponsorship)
