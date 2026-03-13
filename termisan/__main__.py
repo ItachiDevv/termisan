@@ -46,6 +46,27 @@ def parse_args() -> argparse.Namespace:
         help="Preview a theme and exit",
     )
 
+    # Ghostty integration
+    parser.add_argument(
+        "--ghostty-config",
+        metavar="THEME",
+        help="Generate a Ghostty config for a theme and print to stdout",
+    )
+
+    parser.add_argument(
+        "--ghostty-install",
+        metavar="THEME",
+        help="Install Ghostty config + shader for a theme (or 'all')",
+    )
+
+    # Multi-pane automation
+    parser.add_argument(
+        "--multi",
+        nargs="+",
+        metavar="THEME",
+        help="Launch multiple themed sessions in Ghostty/tmux (e.g. --multi naruto dragonball)",
+    )
+
     parser.add_argument(
         "extra_args",
         nargs="*",
@@ -94,6 +115,48 @@ def preview_theme(theme_id: str) -> None:
     show_theme_preview(console, ALL_THEMES[theme_id])
 
 
+def ghostty_install(theme_id: str) -> None:
+    """Install Ghostty config + shader for a theme (or all themes)."""
+    from rich.console import Console
+
+    from termisan.ghostty_config import write_ghostty_config
+    from termisan.ghostty_shaders import install_shader, install_all_shaders
+
+    console = Console()
+
+    if theme_id == "all":
+        # Install everything
+        from termisan.ghostty_shaders import install_all_shaders
+        shader_paths = install_all_shaders()
+        console.print(f"[green]Installed {len(shader_paths)} shaders.[/]")
+        for tid in ALL_THEMES:
+            path = write_ghostty_config(tid)
+            if path:
+                console.print(f"  [dim]Config:[/] {path}")
+        console.print()
+        console.print("[bold green]All Ghostty configs + shaders installed![/]")
+        console.print("[dim]Add to your Ghostty config:[/]")
+        console.print("[cyan]  config-file = ~/.config/ghostty/termisan-<theme>.conf[/]")
+        return
+
+    if theme_id not in ALL_THEMES:
+        console.print(f"[red]Unknown theme '{theme_id}'.[/]")
+        console.print(f"Available: {', '.join(ALL_THEMES.keys())}")
+        console.print("Use 'all' to install everything.")
+        sys.exit(1)
+
+    shader_path = install_shader(theme_id)
+    config_path = write_ghostty_config(theme_id)
+
+    if shader_path:
+        console.print(f"[green]Shader installed:[/] {shader_path}")
+    if config_path:
+        console.print(f"[green]Config installed:[/] {config_path}")
+    console.print()
+    console.print("[dim]Add to your Ghostty config:[/]")
+    console.print(f"[cyan]  config-file = {config_path}[/]")
+
+
 def main() -> None:
     """Main entry point."""
     args = parse_args()
@@ -104,6 +167,24 @@ def main() -> None:
 
     if args.preview:
         preview_theme(args.preview)
+        sys.exit(0)
+
+    if args.ghostty_config:
+        from termisan.ghostty_config import print_ghostty_config
+        ok = print_ghostty_config(args.ghostty_config)
+        sys.exit(0 if ok else 1)
+
+    if args.ghostty_install:
+        ghostty_install(args.ghostty_install)
+        sys.exit(0)
+
+    if args.multi:
+        from termisan.automation import launch_multi_session
+        launch_multi_session(
+            theme_ids=args.multi,
+            command=args.command,
+            extra_args=args.extra_args if args.extra_args else None,
+        )
         sys.exit(0)
 
     from termisan.app import run_app
