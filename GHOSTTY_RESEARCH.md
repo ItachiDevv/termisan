@@ -1,6 +1,7 @@
-# Ghostty Terminal Research for Termisan
+# Ghostty Terminal Research
 
-> Research compiled March 2026 — evaluating Ghostty as a target terminal for the Termisan anime-themed terminal wrapper.
+> Reference notes on Ghostty — the recommended terminal for Termisan.
+> For usage instructions and Ghostty setup, see [docs/USAGE.md](docs/USAGE.md).
 
 ---
 
@@ -129,13 +130,6 @@ custom-shader-animation = true
 - [Awesome Ghostty](https://github.com/fearlessgeekmedia/awesome-ghostty) — curated list of shaders and tools
 - [Fun with Ghostty Shaders](https://catskull.net/fun-with-ghostty-shaders.html) — guide to stacking shaders
 
-### Relevance to Termisan
-**This is huge for an anime-themed wrapper.** Imagine:
-- Anime-specific shader effects per theme (glow for Dragon Ball Z, dark vignette for Death Note)
-- Cursor trail effects matching the character's powers
-- Background animation shaders
-- Theme-specific post-processing
-
 ---
 
 ## 7. Configuration — Dead Simple
@@ -186,7 +180,7 @@ Ghostty has best-in-class protocol support:
 |----------|-----------|-------|
 | **Kitty Graphics Protocol** | Yes | Render images inline in terminal |
 | **Kitty Keyboard Protocol** | Yes | Enhanced keyboard input handling |
-| **Sixel Graphics** | Yes | Legacy image protocol |
+| **Sixel Graphics** | No | Maintainer rejected; prefers Kitty protocol |
 | **Synchronized Rendering** | Yes | Flicker-free updates |
 | **OSC Color Queries** | Yes | Apps can query/set colors |
 | **Light/Dark Mode Notifications** | Yes | Apps notified of OS theme changes |
@@ -246,13 +240,6 @@ end tell
 - Inspect terminal state
 - Integration with Alfred, Raycast, and other macOS automation tools
 
-### Relevance to Termisan
-AppleScript means Termisan could:
-- Programmatically create themed Ghostty windows
-- Set up multi-pane layouts with different anime themes
-- Send commands to specific terminals
-- Build a macOS-native launcher for themed sessions
-
 ---
 
 ## 11. Terminal Inspector — Developer Tool
@@ -263,7 +250,7 @@ Ghostty includes a **built-in terminal inspector** — a real-time debugging too
 - Render timings
 - Internal terminal state
 
-This is invaluable for terminal application developers and would help with Termisan development/debugging.
+Useful for debugging ANSI escape sequences during Termisan development.
 
 ---
 
@@ -295,7 +282,7 @@ New clipboard handling places **multiple formats** (plain text + HTML) on the cl
 | **Native UI** | Yes | Yes | No | No | Yes |
 | **Ligatures** | Yes (GPU) | Yes | No | Yes | Yes |
 | **Custom Shaders** | Yes | No | No | No | No |
-| **Image Protocol** | Kitty+Sixel | iTerm | No | Kitty | No |
+| **Image Protocol** | Kitty | iTerm | No | Kitty | No |
 | **Config Format** | Key-value | GUI | TOML | Conf | GUI |
 | **Zero Config** | Yes | Yes | No | No | Yes |
 | **Nerd Fonts Built-in** | Yes | No | No | No | Yes |
@@ -318,59 +305,40 @@ New clipboard handling places **multiple formats** (plain text + HTML) on the cl
 
 ---
 
-## 16. Relevance to Termisan — Opportunities
+## 16. Termisan Integration — Current Status
 
-### Why Ghostty is Perfect for an Anime Terminal Wrapper
+### What's Implemented
 
-1. **Custom Shaders** — The killer feature. Termisan could ship anime-themed GLSL shaders:
-   - Energy aura effects for Dragon Ball Z
-   - Dark vignette + red tint for Death Note
-   - Cherry blossom particle effects for Demon Slayer
-   - Cyberpunk scan lines for Cyberpunk: Edgerunners
-   - Glitch effects for Solo Leveling shadow summons
-
-2. **Programmatic Themes** — Termisan could generate Ghostty theme configs from its existing theme definitions (hex colors map directly to Ghostty's color config)
-
-3. **AppleScript Automation** — On macOS, Termisan could:
-   - Launch themed Ghostty windows with the right config
-   - Set up multi-pane anime dashboards
-   - Switch themes dynamically
-
-4. **Config Generation** — Termisan's Python themes could generate complete Ghostty config files:
-   ```python
-   # Convert Termisan theme to Ghostty config
-   def theme_to_ghostty(theme):
-       return f"""
-   theme = custom
-   background = {theme['primary']}
-   foreground = {theme['accent']}
-   cursor-color = {theme['secondary']}
-   custom-shader = ~/.config/ghostty/shaders/{theme['name']}.glsl
-   custom-shader-animation = true
-   font-family = JetBrains Mono Nerd Font
-   background-opacity = 0.95
-   background-blur-radius = 20
-   """
-   ```
-
-5. **Native Feel** — Unlike wrapping with PTY + ANSI (current approach), a Ghostty integration would feel like a native app while still being themed
-
-6. **Performance** — Ghostty's 2ms latency and GPU rendering mean anime-themed shaders won't slow down the terminal
-
-7. **Zero Config Base** — Users don't need to configure anything before Termisan customizes their Ghostty
-
-### Potential Architecture
+Termisan works in Ghostty (and any modern terminal) today via its cross-platform PTY/ConPTY wrapper:
 
 ```
 Termisan CLI
-├── Current: PTY wrapper with ANSI art (works in any terminal)
-└── New: Ghostty integration mode
-    ├── Generate Ghostty config from anime theme
-    ├── Generate/install GLSL shaders per theme
-    ├── Launch Ghostty with custom config
-    ├── AppleScript automation (macOS)
-    └── D-Bus automation (Linux)
+├── wrapper_unix.py  — PTY wrapper for macOS + Linux (works in Ghostty, iTerm2, Kitty, etc.)
+├── wrapper_windows.py — ConPTY wrapper for Windows (Windows Terminal, ConEmu, etc.)
+└── wrapper.py — Base class with ANSI header/footer rendering
 ```
+
+Ghostty is recommended due to its 2ms latency, built-in Nerd Fonts, and native split panes for multi-agent sessions. See [docs/USAGE.md](docs/USAGE.md) for recommended Ghostty config.
+
+### Future: Per-Theme GLSL Shader Packs
+
+Ghostty's custom shader support opens the door for per-theme visual effects:
+
+| Theme | Planned Shader Effect |
+|-------|----------------------|
+| Dragon Ball Z | Orange energy aura glow |
+| Death Note | Dark vignette + red tint |
+| Demon Slayer | Flame breathing glow on edges |
+| Cyberpunk: Edgerunners | CRT scanlines + glitch effects |
+| Solo Leveling | Purple shadow particle overlay |
+
+### Future: Ghostty Config Generation
+
+Termisan's hex color definitions map directly to Ghostty theme configs. A future `termisan --ghostty-config <theme>` command could generate a matching Ghostty config file.
+
+### Future: AppleScript / D-Bus Automation
+
+On macOS, Ghostty's AppleScript API could enable Termisan to programmatically create multi-pane themed layouts. On Linux, D-Bus could serve a similar role.
 
 ---
 
@@ -410,7 +378,7 @@ ghostty +validate-config # Validate config file
 Ghostty can be automated via **Apple Shortcuts** using App Intents, in addition to AppleScript.
 
 ### Accessibility API (macOS)
-Read-only accessibility for screen readers and AI tools (opt-in, requires permissions). This could be useful for Termisan to read terminal state.
+Read-only accessibility for screen readers and AI tools (opt-in, requires permissions).
 
 ### Undo Close
 You can **undo closing a tab or window** — a small but delightful feature.
